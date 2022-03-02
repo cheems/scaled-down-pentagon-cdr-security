@@ -98,30 +98,30 @@ def main():
 				print("ACCESS DENIED")
 
 
+access = ""
+previous_tempurature = 0
+previous_light_intensity = 0
+previous_timestamp = 0
+secret_sequence = {
+	"button_a": {
+		"previous_value": 0,
+		"previous_timestamp": 0,
+		"start": 0,
+		"end": 0,
+		"secret": ""
+	},
+	"button_b": {
+		"previous_value": 0,
+		"previous_timestamp": 0,
+		"start": 0,
+		"end": 0,
+		"secret": ""
+	},
+	"start_time_difference": 0,
+	"end_time_difference": 0,
+	"wrong_attempts": 0
+}
 if __name__ == "__main__":
-	access = ""
-	previous_tempurature = 0
-	previous_light_intensity = 0
-	previous_timestamp = 0
-	secret_sequence = {
-		"button_a": {
-			"previous_value": 0,
-			"previous_timestamp": 0,
-			"start": 0,
-			"end": 0,
-			"secret": ""
-		},
-		"button_b": {
-			"previous_value": 0,
-			"previous_timestamp": 0,
-			"start": 0,
-			"end": 0,
-			"secret": ""
-		},
-		"start_time_difference": 0,
-		"end_time_difference": 0,
-		"wrong_attempts": 0
-	}
 	try:
 		main()
 	except KeyboardInterrupt:
