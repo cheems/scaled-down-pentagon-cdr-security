@@ -25,7 +25,8 @@ button_b_pin = board.get_pin('d:8:i')  # define BUTTON B pin as Digital Input Pi
 button_p_a_pin = board.get_pin('d:5:i')  # define PRESSURE BUTTON pin as Digital Input Pin 6
 led_g_pin = board.get_pin('d:12:o')  # define LED pin as Digital Output Pin 12
 led_o_pin = board.get_pin('d:11:o')
-alarm_led_buzzer_pin = board.get_pin('d:10:o')  # define ALARM LED pin as Digital Output Pin 6
+alarm_led_pin = board.get_pin('d:10:o')  # define ALARM LED pin as Digital Output Pin 6
+alarm_buzz_pin = board.get_pin('d:2:o')
 
 
 def check_temperature_difference(thermistor_value):
@@ -129,7 +130,7 @@ def match_secrets(button_a_value, button_b_value):
 				secret_sequence["end_time_difference"] = 1
 		if secret_sequence.get("start_time_difference") and secret_sequence.get("end_time_difference"):
 			if secret_sequence.get("start_time_difference") < 5 and secret_sequence.get("end_time_difference") < 5:
-				secret_entered = secret_sequence.get("button_a").get("secret") + secret_sequence.get("button_a").get("secret")
+				secret_entered = secret_sequence.get("button_a").get("secret") + secret_sequence.get("button_b").get("secret")
 				if secret_entered == access_level_secrets.get("confidential"):
 					access = "granted"
 					access_level = "confidential"
@@ -142,6 +143,7 @@ def match_secrets(button_a_value, button_b_value):
 				else:
 					access = ""
 					secret_sequence["wrong_attempts"] = secret_sequence.get("wrong_attempts") + 1
+					incorrect_secret_alert("start")
 					secret_sequence = {
 						"button_a": {"previous_value": 0, "previous_timestamp": 0, "start": 0, "end": 0, "secret": ""},
 						"button_b": {"previous_value": 0, "previous_timestamp": 0, "start": 0, "end": 0, "secret": ""},
@@ -149,11 +151,11 @@ def match_secrets(button_a_value, button_b_value):
 						"end_time_difference": 0,
 						"wrong_attempts": secret_sequence.get("wrong_attempts")
 					}
-
 			else:
 				access = ""
 				secret_sequence["wrong_attempts"] = secret_sequence.get("wrong_attempts") + 1
 				secret_sequence["button_a"]["secret"], secret_sequence["button_b"]["secret"] = "", ""
+				incorrect_secret_alert("start")
 				secret_sequence = {
 					"button_a": {"previous_value": 0, "previous_timestamp": 0, "start": 0, "end": 0, "secret": ""},
 					"button_b": {"previous_value": 0, "previous_timestamp": 0, "start": 0, "end": 0, "secret": ""},
@@ -163,8 +165,25 @@ def match_secrets(button_a_value, button_b_value):
 				}
 
 
+def incorrect_secret_alert(action):
+	global incorrect_secret_timestamp, incorrect_secret, alert, led_o_pin
+	if action == "start":
+		incorrect_secret_timestamp = time.time() + (3600 * 5.5)
+		alert = 1
+		led_o_pin.write(alert)
+		alarm_buzz_pin.write(alert)
+	else:
+		if alert:
+			if abs(incorrect_secret_timestamp - (time.time() + (3600 * 5.5))) > 1:
+				incorrect_secret_timestamp = time.time() + (3600 * 5.5)
+				alert = 0
+				led_o_pin.write(alert)
+				alarm_buzz_pin.write(alert)
+				incorrect_secret_timestamp = 0
+
+
 def lights():
-	global secret_sequence, lockdown, led_g_pin, alarm_timestamp, alarm_led_buzzer_pin, alarm
+	global secret_sequence, lockdown, led_g_pin, alarm_timestamp, alarm_led_pin, alarm, alarm_buzz_pin
 	if not lockdown:
 		led_g_pin.write(1)
 	else:
@@ -172,22 +191,25 @@ def lights():
 		if not alarm_timestamp:
 			alarm_timestamp = time.time() + (3600 * 5.5)
 			alarm = 1
-			alarm_led_buzzer_pin.write(alarm)
+			alarm_led_pin.write(alarm)
+			alarm_buzz_pin.write(alarm)
 		else:
 			if alarm:
 				if abs(alarm_timestamp - (time.time() + (3600 * 5.5))) > 1:
 					alarm_timestamp = time.time() + (3600 * 5.5)
 					alarm = 0
-					alarm_led_buzzer_pin.write(alarm)
+					alarm_led_pin.write(alarm)
+					alarm_buzz_pin.write(alarm)
 			else:
 				if abs(alarm_timestamp - (time.time() + (3600 * 5.5))) > 0.2:
 					alarm_timestamp = time.time() + (3600 * 5.5)
 					alarm = 1
-					alarm_led_buzzer_pin.write(alarm)
+					alarm_led_pin.write(alarm)
+					alarm_buzz_pin.write(alarm)
 
 
 def main():
-	global secret_sequence, access, lockdown, pressure_increased,\
+	global secret_sequence, access, access_level, lockdown, pressure_increased,\
 		thermistor_pin, ldr_pin, button_a_pin, button_b_pin, button_p_a_pin
 	print("=================== REPORTING STARTED ===================")
 	print(f"================== {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() + (3600 * 5.5)))} ==================")
@@ -198,6 +220,7 @@ def main():
 			print(f"================== {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(currentTime))} ==================")
 		# Read values from sensors
 		lights()
+		incorrect_secret_alert("stop")
 		if not access:
 			temperature_difference_, current_temperature = check_temperature_difference(thermistor_pin.read())
 			light_intensity_difference_, current_light_intensity = check_light_intensity_difference(ldr_pin.read())
@@ -205,8 +228,8 @@ def main():
 			if button_p_a_pin.read():
 				pressure_increased = 1
 				lockdown = 1
-			if temperature_difference_ > 20 and lockdown == 0:
-				lockdown = 1
+			# if temperature_difference_ > 3 and lockdown == 0:
+			# 	lockdown = 1
 			if light_intensity_difference_ > 12 and lockdown == 0:
 				lockdown = 1
 			if not secret_sequence.get("wrong_attempts") < 3:
@@ -219,8 +242,14 @@ def main():
 				print("MAX LIGHT INTENSITY DIFFERENCE\t:\t", light_intensity_difference_, "%")
 				print("FLOOR PRESSURE DIFFERENCE\t\t:\t", pressure_increased)
 				print("=" * 57)
+				print(secret_sequence.get("button_a").get("secret"), secret_sequence.get("button_b").get("secret"))
 				print("UNSUCCESSFULL ENTRY ATTEMPTS\t:\t", secret_sequence.get("wrong_attempts"))
-				print("LOCKDOWN\t\t\t\t\t\t:\t", lockdown)
+				print("LOCKDOWN\t\t\t\t\t\t:\t", bool(lockdown))
+		if access:
+			if abs(int(time.time()) - time.time()) >= 0.9:  # Prints data once a 0.5 secs or more
+				print("ACCESS LEVEL\t\t\t\t\t:\t", " ".join(access_level.upper().split("_")))
+				print("UNSUCCESSFULL ENTRY ATTEMPTS\t:\t", secret_sequence.get("wrong_attempts"))
+				print("LOCKDOWN\t\t\t\t\t\t:\t", bool(lockdown))
 
 
 start_time = time.time() + (3600 * 5.5)
@@ -232,6 +261,9 @@ light_intensity_difference = 0
 pressure_increased = 0
 alarm_timestamp = 0
 alarm = 0
+incorrect_secret_timestamp = 0
+incorrect_secret = 0
+alert = 0
 secret_sequence = {
 	"button_a": {
 		"previous_value": 0,
@@ -255,9 +287,9 @@ secret_sequence = {
 access = ""
 access_level = ""
 access_level_secrets = {
-	"confidential": "..__..",  # .._ | _..
-	"secret": "._._..",  # ._. | _..
-	"top_secrwt": ".___.__..."  # .___ | .__...
+	"confidential": ".._.._",  # .._ | .._
+	"secret": "._.._.",  # ._. | ._.
+	"top_secret": ".___..___."  # .___. | .___.
 }
 lockdown = 0
 
@@ -265,6 +297,9 @@ if __name__ == "__main__":
 	try:
 		main()
 	except KeyboardInterrupt:
-		alarm_led_buzzer_pin.write(0)
+		led_g_pin.write(0)
+		led_o_pin.write(0)
+		alarm_led_pin.write(0)
+		alarm_buzz_pin.write(0)
 		print("=================== REPORTING STOPPED ===================")
 		print(f"================== {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() + (3600 * 5.5)))} ==================")
