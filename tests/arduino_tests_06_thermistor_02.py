@@ -11,16 +11,9 @@ it = util.Iterator(board)
 it.start()
 
 
-def turnOffAllPins():
-	for i in range(2, 13):
-		board.digital[i].mode = OUTPUT
-		board.digital[i].write(0)
-	print("\nALL PINS WERE TURNED OFF")
-
-
 def main():
+	print("========= STARTED =========")
 	while True:
-		print("READ VALUE")
 		R1 = 10000
 		T0 = 25 + 273.15
 		VR2 = thermistor_pin.read()
@@ -39,5 +32,4 @@ if __name__ == "__main__":
 	try:
 		main()
 	except KeyboardInterrupt:
-		turnOffAllPins()
 		print("========= STOPPED =========")
