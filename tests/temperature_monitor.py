@@ -140,7 +140,7 @@ def lights():
 # This function is the main activity
 def main():
 	# Taking variables from the outer scope
-	global thermistor_pin, lockdown
+	global thermistor_pin, lockdown, suppress_fire
 	print("==== REPORTING STARTED ====")
 	while True:
 		# Handle LEDs and buzzer depending on lockdown status
