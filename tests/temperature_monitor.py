@@ -32,6 +32,7 @@ previous_temperature = 0                    # Temperature value that was before 
 temperature_difference = 0                  # Maximum temperature difference recorded
 temperature_difference_refresh_time = 0     # Used to refresh maximum temperature difference once a certain time period
 lockdown = 0                                # Lockdown status
+suppress_fire = 0                           # Fire suppression system status
 alarm_timestamp = 0                         # Last time that the alarm was triggered
 alarm = 0                                   # Value to be written on the alarm pins
 
@@ -148,7 +149,9 @@ def main():
 		temperature_difference_, current_temperature = check_temperature_difference(thermistor_pin.read())
 		if temperature_difference_ > 5 and lockdown == 0:
 			# If maximum temperature difference detected is larger than 5 celsius degrees, turn system into a lockdown
+			# and fire suppression system is turned on
 			lockdown = 1
+			suppress_fire = 1
 		# Send obtained values to server for further actions.
 		# (Since here it is in the basic level, it just prints values)
 		print("TEMPERATURE\t\t\t\t\t\t:\t", current_temperature)
