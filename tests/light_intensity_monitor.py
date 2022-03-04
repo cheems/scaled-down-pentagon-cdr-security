@@ -1,4 +1,4 @@
-# Title: Temperature Monitoring for Fire Detection
+# Title: Light Intensity Monitoring for Unusual Activities
 # Developed by Group 40-A for GP106 Project - The Pentagon
 # Written according to PEP8 guidelines
 # Repo can be found here: https://github.com/cheems/scaled-down-pentagon-cdr-security/
@@ -10,7 +10,6 @@ except ImportError:
 	import pip
 	pip.main(['install', 'pyfirmata'])
 from pyfirmata import Arduino, util
-from math import log
 import time
 
 # Setup
@@ -21,77 +20,54 @@ iterator = util.Iterator(board)
 iterator.start()
 
 # Define pins
-thermistor_pin = board.get_pin('a:0:i')     # Define thermistor pin as analog input pin 0
+ldr_pin = board.get_pin('a:1:i')            # Define LDR pin as analog input pin 1
 led_g_pin = board.get_pin('d:12:o')         # Define green LED pin as digital output pin 12
 alarm_led_pin = board.get_pin('d:10:o')     # Define alarm(red) LED pin as digital output pin 10
 alarm_buzz_pin = board.get_pin('d:2:o')     # Define alarm buzzer pin as digital output pin 2
 
 # Define variables, most are declared with dummy values
+previous_light_intensity = 0                # Light intensity percentage that was before a certain time period
+light_intensity_difference = 0              # Maximum light intensity difference recorded
 start_time = time.time() + (3600 * 5.5)     # Time which program is started running
-previous_temperature = 0                    # Temperature value that was before a certain time period
-temperature_difference = 0                  # Maximum temperature difference recorded
-temperature_difference_refresh_time = 0     # Used to refresh maximum temperature difference once a certain time period
 lockdown = 0                                # Lockdown status
 alarm_timestamp = 0                         # Last time that the alarm was triggered
 alarm = 0                                   # Value to be written on the alarm pins
 
 
-# this function checks for temperature fluctuations occure in a certain time period
-def check_temperature_difference(thermistor_value):
+# this function checks for light intensity differences occure in a certain time period
+def check_light_intensity_difference(ldr_value):
 	# Taking variables from the outer scope
-	global previous_temperature, temperature_difference,\
-		temperature_difference_refresh_time, start_time
-	if not temperature_difference_refresh_time:
-		# If this has the dummy value "0"
-		# Record current time, This is used as the last refreshed time
-		temperature_difference_refresh_time = time.time() + (3600 * 5.5)
-	else:
-		# If it is still been less than three seconds from the time program started working, make the temperature difference 0
-		# Usually the thermistor shows very high fluctuations during first few seconds. Doing this can avoid invalid fluctuations
-		if abs(start_time - (time.time() + (3600 * 5.5))) < 3:
-			temperature_difference = 0
-		# If it's been more than 10 seconds from the time temperature difference was refreshed, refresh the maximum tempurature difference
-		# and record the curren time as the last refreshed time
-		if abs(temperature_difference_refresh_time - (time.time() + (3600 * 5.5))) > 10:
-			temperature_difference = 0
-			temperature_difference_refresh_time = time.time() + (3600 * 5.5)
-	current_temperature = 25        # Record the current temperature. This is a dummy value
-	if not thermistor_value:
-		# If the value got from the thermistor is not valid (None type) {this happens in the first few miliseconds}
+	global previous_light_intensity, light_intensity_difference, start_time
+	current_light_intensity = 0     # Record the current light intensity. This is a dummy value
+	if not ldr_value:
+		# If the value got from the LDR is not valid (None type) {this happens in the first few miliseconds}
 		# Return followings with the last recorded values
-		return temperature_difference, current_temperature
+		return light_intensity_difference, current_light_intensity
 	# =============================
-	# Calculate current temperature
-	VR2 = thermistor_value      # Potential drop across the
-	R1 = 10000                  # Known resistance of through hole resistor
-	T0 = 25 + 273.15            # Room temperature in Kelvin
-	R2 = R1 * (1 / VR2 - 1)     # Resistance provided by thermistor
-	try:
-		logR2 = log(R2 / 1000)
-	except ValueError:
-		# If it gets ValueError, return followings with the last recorded values
-		return temperature_difference, current_temperature
-	TK = 1 / ((logR2 / 3455) + (1 / T0))    # Current temperature in Kelvin
-	TC = TK - 273.15                        # Current temperature in Celsius degrees
-	# ===========================
-	# Find temperature difference
-	current_temperature = TC        # Record current temperature
-	if not previous_temperature:
-		# If this has the dummy value "0"
-		# Record current temperature. This will be used as the last recorded tempurature
-		previous_temperature = current_temperature
+	# Calculate current light intensity
+	current_light_intensity = ldr_value / 1.023 * 100       # Current light intensiy as a percentage
+	# If it is still been less than three seconds from the time program started working, make the light intensity difference 0
+	# Usually the LDR shows very high differences during first few seconds. Doing this can avoid invalid fluctuations
+	if abs(start_time - (time.time() + (3600 * 5.5))) < 3:
+		light_intensity_difference = 0
 		# Return followings with the last recorded values
-		return temperature_difference, current_temperature
-	# Since we need the maximum tempurature difference in a time period, 0 as the difference would be useless
-	# Therefore, tempurature difference is recorded only if the current temperature is different from the previous tempurature recorded
-	# and the difference between them is larger than the previously recorded maximum temperature difference.
-	if previous_temperature != current_temperature:
-		if temperature_difference < abs(previous_temperature - current_temperature):
-			temperature_difference = abs(previous_temperature - current_temperature)
-	# Record current temperature. This will be used as the last recorded tempurature
-	previous_temperature = current_temperature
+		return light_intensity_difference, current_light_intensity
+	if not previous_light_intensity:
+		# If this has the dummy value "0"
+		# Record current light intensity. This will be used as the last recorded light intensity
+		previous_light_intensity = current_light_intensity
+		# Return followings with the last recorded values
+		return light_intensity_difference, current_light_intensity
+	# Since we need the maximum light intensity difference in a time period, 0 as the difference would be useless
+	# Therefore, light intensity difference is recorded only if the current light intensity is different from the previous light intensity percentage recorded
+	# and the difference between them is larger than the previously recorded maximum light intensity difference.
+	if previous_light_intensity != current_light_intensity:
+		if light_intensity_difference < abs(previous_light_intensity - current_light_intensity):
+			light_intensity_difference = abs(previous_light_intensity - current_light_intensity)
+	# Record current light intensity. This will be used as the last recorded light intensity
+	previous_light_intensity = current_light_intensity
 	# Return followings with the last recorded values
-	return temperature_difference, current_temperature
+	return light_intensity_difference, current_light_intensity
 
 
 # This function handles LEDs and the buzzer depending on lockdown status
@@ -139,20 +115,20 @@ def lights():
 # This function is the main activity
 def main():
 	# Taking variables from the outer scope
-	global thermistor_pin, lockdown
+	global ldr_pin, lockdown
 	print("==== REPORTING STARTED ====")
 	while True:
 		# Handle LEDs and buzzer depending on lockdown status
 		lights()
-		# Get maximum temperature difference and current temperature value using check_temperature_difference()
-		temperature_difference_, current_temperature = check_temperature_difference(thermistor_pin.read())
-		if temperature_difference_ > 5 and lockdown == 0:
-			# If maximum temperature difference detected is larger than 5 celsius degrees, turn system into a lockdown
+		# Get maximum light intensity difference and current light intensity percentage using check_temperature_difference()
+		light_intensity_difference_, current_light_intensity = check_light_intensity_difference(ldr_pin.read())
+		if light_intensity_difference_ > 10 and lockdown == 0:
+			# If maximum light intensity difference detected is larger than 12%, turn system into a lockdown
 			lockdown = 1
 		# Send obtained values to server for further actions.
 		# (Since here it is in the basic level, it just prints values)
-		print("TEMPERATURE\t\t\t\t\t\t:\t", current_temperature)
-		print("MAX TEMPERATURE DIFFERENCE\t\t:\t", temperature_difference_)
+		print("LIGHT INTENSITY\t\t\t\t\t:\t", current_light_intensity, "%")
+		print("MAX LIGHT INTENSITY DIFFERENCE\t:\t", light_intensity_difference_, "%")
 		print("LOCKDOWN\t\t\t\t\t\t:\t", bool(lockdown))
 
 

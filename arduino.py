@@ -66,12 +66,17 @@ def check_temperature_difference(thermistor_value):
 
 
 def check_light_intensity_difference(ldr_value):
-	global previous_light_intensity, light_intensity_difference
+	global previous_light_intensity, light_intensity_difference, start_time
 	current_light_intensity = 0
 	if not ldr_value:
 		return light_intensity_difference, current_light_intensity
 	# Find light intensity difference
 	current_light_intensity = ldr_value / 1.023 * 100
+	# If it is still been less than three seconds from the time program started working, make the light intensity difference 0
+	# Usually the LDR shows very high differences during first few seconds. Doing this can avoid invalid fluctuations
+	if abs(start_time - (time.time() + (3600 * 5.5))) < 3:
+		light_intensity_difference = 0
+	# Return followings with the last recorded values
 	if not previous_light_intensity:
 		previous_light_intensity = current_light_intensity
 		return light_intensity_difference, current_light_intensity
