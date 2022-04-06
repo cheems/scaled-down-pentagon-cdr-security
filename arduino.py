@@ -4,6 +4,7 @@ try:
 	import paho.mqtt.client as mqtt
 except ImportError:
 	import pip
+
 	pip.main(['install', 'pyfirmata', 'paho-mqtt'])
 from pyfirmata import Arduino, util
 from math import log
@@ -12,6 +13,86 @@ import paho.mqtt.client as mqtt
 
 # Setup
 board = Arduino("COM4")
+group = "G40A"
+topic = "G40A/CDR/DATA"
+topic1 = "G40/CP/LOCK"
+topic2 = "G40A/CDR/CODE1"
+topic3 = "G40A/CDR/CODE2"
+topic4 = "G40A/CDR/CODE3"
+mqttBroker = "vpn.ce.pdn.ac.lk"  # Must be connected to the vpn
+mqttPort = 8883
+
+
+# The callback for when the client receives a CONNACK response from the server.
+def on_connect(client, userdata, flags, rc):
+	# print("Connected with result code " + str(rc))
+	# Subscribing in on_connect() means that if we lose the connection and
+	# reconnect then subscriptions will be renewed.
+	client.subscribe(topic)
+	client.subscribe(topic1)
+	client.subscribe(topic2)
+	client.subscribe(topic3)
+	client.subscribe(topic4)
+
+
+# The callback for when a PUBLISH message is received from the server.
+def on_message(client, userdata, msg):
+	global lockdown, previous_temperature, temperature_difference, temperature_difference_refresh_time, \
+		previous_light_intensity, light_intensity_difference, pressure_increased, alarm_timestamp, alarm, \
+		incorrect_secret_timestamp, incorrect_secret, alert, secret_sequence, access_level_secrets, \
+		access, access_level
+	# print(msg.topic + " " + str(msg.payload))
+
+	if msg.topic == "G40/CP/LOCK":
+		if str(msg.payload)[2] == "T":
+			lockdown = 1
+
+		if str(msg.payload)[2] == "F":
+			lockdown = 0
+			previous_temperature = 0
+			temperature_difference = 0
+			temperature_difference_refresh_time = 0
+			previous_light_intensity = 0
+			light_intensity_difference = 0
+			pressure_increased = 0
+			alarm_timestamp = 0
+			alarm = 0
+			incorrect_secret_timestamp = 0
+			incorrect_secret = 0
+			alert = 0
+			access = ""
+			access_level = ""
+			secret_sequence = {
+				"button_a": {"previous_value": 0, "previous_timestamp": 0, "start": 0, "end": 0, "secret": ""},
+				"button_b": {"previous_value": 0, "previous_timestamp": 0, "start": 0, "end": 0, "secret": ""},
+				"start_time_difference": 0,
+				"end_time_difference": 0,
+				"wrong_attempts": 0
+			}
+			alarm_led_pin.write(0)
+			alarm_buzz_pin.write(0)
+
+	if msg.topic == "G40A/CDR/CODE1":
+		access_level_secrets["confidential"] = str(msg.payload).split(":")[1][1:-3]
+
+	if msg.topic == "G40A/CDR/CODE2":
+		access_level_secrets["secret"] = str(msg.payload).split(":")[1][1:-3]
+
+	if msg.topic == "G40A/CDR/CODE3":
+		access_level_secrets["top_secret"] = str(msg.payload).split(":")[1][1:-3]
+
+	# print(access_level_secrets)
+
+client = mqtt.Client(group)  # Group 1A (Classified Document Room)
+
+try:
+	client.connect(mqttBroker, mqttPort)
+	client.on_connect = on_connect
+	client.on_message = on_message
+	client.loop_start()
+except:
+	print("Connection to MQTT broker failed!")
+	exit(1)
 
 # start the utilization service
 iterator = util.Iterator(board)
@@ -126,16 +207,19 @@ def match_secrets(button_a_value, button_b_value):
 		record_secret(button_b_value, "b")
 	if secret_sequence.get("button_a").get("end") and secret_sequence.get("button_b").get("end"):
 		if not secret_sequence.get("start_time_difference"):
-			secret_sequence["start_time_difference"] = secret_sequence.get("button_a").get("start") - secret_sequence.get("button_b").get("start")
+			secret_sequence["start_time_difference"] = secret_sequence.get("button_a").get(
+				"start") - secret_sequence.get("button_b").get("start")
 			if secret_sequence.get("start_time_difference") == 0.0:
 				secret_sequence["start_time_difference"] = 1
 		if not secret_sequence.get("end_time_difference"):
-			secret_sequence["end_time_difference"] = secret_sequence.get("button_a").get("end") - secret_sequence.get("button_b").get("end")
+			secret_sequence["end_time_difference"] = secret_sequence.get("button_a").get("end") - secret_sequence.get(
+				"button_b").get("end")
 			if secret_sequence.get("end_time_difference") == 0.0:
 				secret_sequence["end_time_difference"] = 1
 		if secret_sequence.get("start_time_difference") and secret_sequence.get("end_time_difference"):
 			if secret_sequence.get("start_time_difference") < 5 and secret_sequence.get("end_time_difference") < 5:
-				secret_entered = secret_sequence.get("button_a").get("secret") + secret_sequence.get("button_b").get("secret")
+				secret_entered = secret_sequence.get("button_a").get("secret") + secret_sequence.get("button_b").get(
+					"secret")
 				if secret_entered == access_level_secrets.get("confidential"):
 					access = "granted"
 					access_level = "confidential"
@@ -214,18 +298,21 @@ def lights():
 
 
 def main():
-	global secret_sequence, access, access_level, lockdown, pressure_increased,\
+	global secret_sequence, access, access_level, lockdown, pressure_increased, \
 		thermistor_pin, ldr_pin, button_a_pin, button_b_pin, button_p_a_pin
 	print("=================== REPORTING STARTED ===================")
-	print(f"================== {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() + (3600 * 5.5)))} ==================")
+	print(
+		f"================== {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() + (3600 * 5.5)))} ==================")
 	print("=" * 57)
 	while True:
 		currentTime = time.time() + (3600 * 5.5)
 		if abs(int(time.time()) - time.time()) >= 0.9:
-			print(f"================== {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(currentTime))} ==================")
+			print(
+				f"================== {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(currentTime))} ==================")
 		# Read values from sensors
 		lights()
 		incorrect_secret_alert("stop")
+
 		if not access:
 			temperature_difference_, current_temperature = check_temperature_difference(thermistor_pin.read())
 			light_intensity_difference_, current_light_intensity = check_light_intensity_difference(ldr_pin.read())
@@ -233,8 +320,8 @@ def main():
 			if button_p_a_pin.read():
 				pressure_increased = 1
 				lockdown = 1
-			# if temperature_difference_ > 3 and lockdown == 0:
-			# 	lockdown = 1
+			if temperature_difference_ > 7 and lockdown == 0:
+				lockdown = 1
 			if light_intensity_difference_ > 12 and lockdown == 0:
 				lockdown = 1
 			if not secret_sequence.get("wrong_attempts") < 3:
@@ -250,6 +337,15 @@ def main():
 				print(secret_sequence.get("button_a").get("secret"), secret_sequence.get("button_b").get("secret"))
 				print("UNSUCCESSFULL ENTRY ATTEMPTS\t:\t", secret_sequence.get("wrong_attempts"))
 				print("LOCKDOWN\t\t\t\t\t\t:\t", bool(lockdown))
+				# print(access_level_secrets.get("confidential"))
+
+				data = [str(round(current_temperature, 2)), str(round(current_light_intensity, 2)),
+				        str(pressure_increased), str(bool(lockdown))]  # array of data
+				data = ','.join(data)  # join array of data as a single comma seperated string
+
+				client.publish(topic, data)  # publish the data to MQTT broker using the topic
+				# print('Sent from Arduino ', data)
+
 		if access:
 			if abs(int(time.time()) - time.time()) >= 0.9:  # Prints data once a 0.5 secs or more
 				print("ACCESS LEVEL\t\t\t\t\t:\t", " ".join(access_level.upper().split("_")))
@@ -307,4 +403,5 @@ if __name__ == "__main__":
 		alarm_led_pin.write(0)
 		alarm_buzz_pin.write(0)
 		print("=================== REPORTING STOPPED ===================")
-		print(f"================== {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() + (3600 * 5.5)))} ==================")
+		print(
+			f"================== {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() + (3600 * 5.5)))} ==================")
